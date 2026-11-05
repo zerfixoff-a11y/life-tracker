@@ -38,8 +38,6 @@ input,select,textarea{font:inherit;padding:8px;border:2px solid var(--bd);border
 .leg span:before{content:"";display:inline-block;width:12px;height:12px;border:2px solid var(--bd);margin-right:5px;background:var(--k);vertical-align:-2px}
 table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:6px;border-bottom:1px solid var(--mu);text-align:left}
 .scroll{overflow-x:auto}
-.cvhead{display:flex;gap:14px;align-items:center;margin-bottom:8px}.cvhead img{width:96px;height:96px;object-fit:cover;border-radius:50%;border:2px solid var(--bd)}
-.cv h3{font-size:1rem;margin:12px 0 2px}.cv ul{margin:0;padding-left:20px}textarea{width:100%}
 @media print{h1,#who,nav,.noprint{display:none!important}body{background:#fff!important}.card{background:#fff!important;color:#000!important;border-color:#000!important}}
 </style></head><body><main>
 <h1>Mon Life Tracker</h1>
@@ -73,7 +71,7 @@ const T={
  series:{n:'📺 Séries',f:[['what','Nom de la série','text'],['stars','Note','stars']]},
  shop:{n:'🛍️ Shopping',f:[['amt','Dépensé aujourd’hui (€, 0 = rien)','number']]}
 };
-const TABS=[...Object.keys(T),'month','global','me','cv'],NAMES={month:'📅 Résumé du mois',global:'🌍 Résumé global',me:'💬 IA — Moi',cv:'🪪 Mon résumé'};
+const TABS=[...Object.keys(T),'month','global'],NAMES={month:'📅 Résumé du mois',global:'🌍 Résumé global'};
 let tab=(()=>{try{const x=localStorage.getItem('lt_tab');return TABS.includes(x)?x:'sleep'}catch(e){return'sleep'}})(),monSel=null,yr=new Date().getFullYear(),star=0;
 const curMonth=()=>today().slice(0,7);
 const eur=n=>(Math.round(n*100)/100).toFixed(2).replace('.',',')+' €';
@@ -182,88 +180,6 @@ function globalView(){
  <div class="row"><button class="btn" onclick="exp()">Exporter (.json)</button><label class="btn">Importer<input type="file" accept=".json" hidden onchange="imp(this)"></label></div></div>`;
 }
 
-/* ---------- IA « Moi » ---------- */
-const CVS=[['traits','Ce que je suis'],['aime','J’aime'],['naime_pas','J’aime moins'],['difficultes','Ce sur quoi je travaille'],['objectifs','Mes objectifs'],['infos','En vrac']];
-let msg='';
-function analyze(notes){
- const F={traits:[],aime:[],naime_pas:[],difficultes:[],objectifs:[],infos:[]};
- const SW=['peur','honte','compl','manqu','avoir','faire','trop','tres','bien','plus','chose'];
- const st=t=>t.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().split(/[^a-z]+/).filter(w=>w.length>=4).map(w=>w.slice(0,5)).filter(w=>!SW.includes(w));
- const same=(a,b)=>a.toLowerCase()==b.toLowerCase();
- const add=(c,x)=>{x=x.trim().replace(/[\s.!?,]+$/,'');if(x.length<2||F[c].some(y=>same(y,x)))return;F[c].push(x)};
- const del=(cats,x)=>{const t=st(x);if(!t.length)return 0;let n=0;cats.forEach(c=>{const b=F[c].length;F[c]=F[c].filter(y=>!st(y).some(w=>t.includes(w)));n+=b-F[c].length});return n};
- const list=x=>x.split(/\s*,\s*|\s+et\s+|\s+ou\s+/).filter(Boolean);
- const BAD=/^(?:allé|allée|en |à |au |aux |dans |chez |sur |là|ici|rentré|parti|avec |depuis |en train)/;
- const R=[
-  [/^j'ai (?:enfin )?(?:vaincu|surmonté|dépassé|battu|dompté|réussi à vaincre|réussi à surmonter) (?:ma |mon |mes |la |le |l'|les )?(.+)$/,x=>del(['traits','difficultes','objectifs'],x)],
-  [/^j'ai arrêté (?:de |d')?(.+)$/,x=>del(['traits','aime','difficultes','infos','objectifs'],x)],
-  [/^je n'ai plus (.+)$/,x=>del(['difficultes'],x)],
-  [/^je ne suis plus (.+)$/,x=>del(['traits','difficultes'],x)],
-  [/^je n'aime plus (.+)$/,x=>{del(['aime'],x);list(x).forEach(i=>add('naime_pas',i))}],
-  [/^je (?:ne )?suis pas (.+)$/,x=>{if(!del(['traits'],x))list(x).forEach(i=>add('traits','pas '+i))}],
-  [/^(?:je n'aime(?: vraiment)? pas|j'aime pas|je déteste|je ne supporte pas|je supporte pas)\s+(.+)$/,x=>list(x).forEach(i=>{del(['aime'],i);add('naime_pas',i)})],
-  [/^(?:j'aime(?: bien| beaucoup| trop)?|j'adore|je kiffe)\s+(.+)$/,x=>list(x).forEach(i=>{del(['naime_pas'],i);add('aime',i)})],
-  [/^je suis (?:fan|passionné|passionnée) (?:de |du |des |d'|par )(.+)$/,x=>list(x).forEach(i=>add('aime',i))],
-  [/^(?:je veux|je voudrais|j'aimerais|je compte|je vais essayer de|je vais essayer d'|mon (?:but|objectif|rêve) (?:est|c'est)(?: de| d')?)\s*(.+)$/,x=>add('objectifs',x)],
-  [/^j'ai (peur .+|honte .+|(?:un |des )?complexes? .+)$/,x=>add('difficultes',x)],
-  [/^j'ai du mal (?:à |a )(.+)$/,x=>add('difficultes','du mal à '+x)],
-  [/^je (?:galère|n'arrive pas|arrive pas) (?:à |a )(.+)$/,x=>add('difficultes','du mal à '+x)],
-  [/^je (manque .+)$/,x=>add('difficultes',x)],
-  [/^j'ai (\d{1,2} ans)$/,x=>add('infos',"j'ai "+x)],
-  [/^(?:j'habite|je vis) (.+)$/,x=>add('infos',"j'habite "+x)],
-  [/^je travaille (.+)$/,x=>add('infos','je travaille '+x)],
-  [/^je joue (.+)$/,x=>add('infos','je joue '+x)],
-  [/^j'étudie (.+)$/,x=>add('infos',"j'étudie "+x)],
-  [/^je fais (.+)$/,x=>add('infos','je fais '+x)],
-  [/^je suis (.+)$/,x=>{if(!BAD.test(x.toLowerCase()))list(x).forEach(i=>add('traits',i))}]
- ];
- for(const nt of notes){
-  const t=nt.text.replace(/’/g,"'").replace(/\b(?:j'suis|chuis|chui)\b/gi,'je suis');
-  for(const seg of t.split(/[.!?\n;]+|,\s*(?=j'|je )|\s+et\s+(?=j'|je )|\s+mais\s+/i)){
-   let o=seg.trim();
-   for(;;){const q=o.replace(/^(?:en fait|enfin|bref|et|aussi|maintenant|aujourd'hui|du coup|alors|ok|bah|ben|donc|finalement|sinon|franchement)[\s,]+/i,'');if(q==o)break;o=q}
-   const l=o.toLowerCase();
-   for(const[re,fn]of R){const m=l.match(re);if(m){const g=m[m.length-1];fn(o.slice(o.length-g.length));break}}
-  }
- }
- const J=a=>a.length>1?a.slice(0,-1).join(', ')+' et '+a[a.length-1]:a[0],r=[];
- if(F.traits.length)r.push('Je suis '+J(F.traits.slice(0,5))+'.');
- if(F.aime.length)r.push('J’aime '+J(F.aime.slice(0,4))+'.');
- if(F.objectifs.length)r.push('Mon objectif : '+F.objectifs[F.objectifs.length-1]+'.');
- return Object.assign({resume:r.join(' ')},F);
-}
-function runRefresh(){
- const p=(D.notes||[]).length?analyze(D.notes):null;D.profile=p;
- if(p)p.maj=today();save();
- msg=!p?'':(p.traits.length+p.aime.length+p.naime_pas.length+p.difficultes.length+p.objectifs.length+p.infos.length)?'✓ Résumé mis à jour.':'Je n’ai rien reconnu : écris des phrases comme « je suis… », « j’aime… », « je veux… ».';
- render();
-}
-function sendNote(){
- const v=$('#n_text').value.trim();if(!v)return;
- (D.notes=D.notes||[]).push({id:Date.now(),date:today(),text:v});save();runRefresh();
-}
-function delNote(id){if(confirm('Supprimer cette note ? Clique ensuite sur « Relire tout » pour mettre le résumé à jour.')){D.notes=D.notes.filter(n=>n.id!=id);save();render()}}
-function meView(){
- const ns=[...(D.notes||[])].reverse();
- return `<div class="card"><h2>💬 IA — Moi</h2><p>Écris ce que tu veux sur toi : ce que tu es, ce que tu aimes, tes complexes, ce qui change. Ça relit tout et tient ton résumé à jour, gratuitement, directement sur ton appareil (rien n’est envoyé sur internet).<br><small>Il comprend des phrases comme « je suis… », « j’aime… », « je n’aime pas… », « j’ai peur de… », « je veux… », « j’ai vaincu ma timidité », « je ne suis plus… ».</small></p>
- <textarea id="n_text" rows="4" placeholder="Ex : je suis un peu timide, j’adore le basket…"></textarea>
- <div class="row" style="margin-top:8px"><button class="btn go" onclick="sendNote()">Envoyer à l’IA</button><button class="btn" onclick="runRefresh()">Relire tout et mettre à jour</button></div>
- <p>${esc(msg)}</p></div>
- <div class="card"><h2>Ce que je t’ai dit</h2><div class="list">${ns.length?ns.map(n=>`<div class="item"><div><b>${fdate(n.date)}</b> — ${esc(n.text)}</div><button class="btn del" onclick="delNote(${n.id})" aria-label="Supprimer">✕</button></div>`).join(''):'<small>Rien pour l’instant.</small>'}</div></div>`;
-}
-function cvText(){const pr=D.profile;if(!pr)return'';let t=P.first+' '+P.last+'\n\n'+(pr.resume||'')+'\n';for(const[k,l]of CVS){if(k=='difficultes'&&!D.showDiff)continue;if((pr[k]||[]).length)t+='\n'+l+' :\n'+pr[k].map(x=>'- '+x).join('\n')+'\n'}return t}
-function copyCV(){navigator.clipboard.writeText(cvText()).then(()=>alert('Copié ✓'),()=>alert('Copie impossible ici.'))}
-function setPhoto(i){const f=i.files[0];if(!f)return;const im=new Image(),u=URL.createObjectURL(f);
- im.onload=()=>{const r=Math.min(1,360/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*r;c.height=im.height*r;c.getContext('2d').drawImage(im,0,0,c.width,c.height);D.photo=c.toDataURL('image/jpeg',.82);URL.revokeObjectURL(u);save();render()};im.src=u}
-function cvView(){
- const pr=D.profile;
- const body=pr?`<p>${esc(pr.resume||'')}</p>`+CVS.filter(([k])=>(k!='difficultes'||D.showDiff)&&(pr[k]||[]).length).map(([k,l])=>`<h3>${l}</h3><ul>${pr[k].map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`).join(''):'<p><small>Pas encore de résumé. Va dans « IA — Moi », écris quelques phrases sur toi, puis reviens ici.</small></p>';
- return `<div class="card cv"><div class="cvhead">${D.photo?`<img src="${D.photo}" alt="Ma photo">`:''}<div><h2 style="font-size:1.8rem">${esc(P.first)} ${esc(P.last)}</h2>${pr?`<small>Mis à jour le ${fdate(pr.maj)}</small>`:''}</div></div>${body}</div>
- <div class="card noprint"><div class="row"><label class="btn">📷 Ma photo<input type="file" accept="image/*" hidden onchange="setPhoto(this)"></label>
- ${D.photo?'<button class="btn" onclick="D.photo=null;save();render()">Retirer la photo</button>':''}
- <button class="btn" onclick="runRefresh()">Mettre à jour</button><button class="btn go" onclick="window.print()">Imprimer / PDF</button><button class="btn" onclick="copyCV()">Copier le texte</button></div>
- <p>${esc(msg)}</p><p><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" ${D.showDiff?'checked':''} onchange="D.showDiff=this.checked;save();render()"> Afficher « ce sur quoi je travaille » dans le résumé partagé</label></p></div>`;
-}
 function exp(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));a.download='life-tracker-'+today()+'.json';a.click()}
 function imp(i){const r=new FileReader();r.onload=()=>{try{D=JSON.parse(r.result);save();render()}catch(e){alert('Fichier invalide.')}};if(i.files[0])r.readAsText(i.files[0])}
 
@@ -281,7 +197,7 @@ function render(keep){
  if(tab=='month'){
   const m=monSel||curMonth(),ms=months();
   h=`<div class="card"><label>Mois affiché<select onchange="monSel=this.value;render()">${ms.map(x=>`<option value="${x}" ${x==m?'selected':''}>${mlabel(x)}${x==curMonth()?' (en cours)':''}</option>`).join('')}</select></label></div>`+summary(e=>e.date.startsWith(m),'Résumé de '+mlabel(m));
- }else if(tab=='global')h=globalView();else if(tab=='me')h=meView();else if(tab=='cv')h=cvView();else h=trackerView(tab);
+ }else if(tab=='global')h=globalView();else h=trackerView(tab);
  let sv=keep?['f_date',...T[tab].f.map(f=>'f_'+f[0])].map(i=>$('#'+i)&&$('#'+i).value):null;
  $('#view').innerHTML=h;
  if(sv)['f_date',...T[tab].f.map(f=>'f_'+f[0])].forEach((i,n)=>{if($('#'+i)&&sv[n]!=null)$('#'+i).value=sv[n]});
