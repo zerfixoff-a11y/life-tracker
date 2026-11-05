@@ -132,7 +132,7 @@ function dayMap(t){
 function dayGrid(t){
  const m=dayMap(t),P=PAL[t],L=GL[t];
  let h='<i></i>'+'JFMAMJJASOND'.split('').map(c=>`<i>${c}</i>`).join('');
- for(let d=1;d<=31;d++){h+=`<i>${d}</i>`;for(let mo=1;mo<=12;mo++){const k=`${yr}-${p(mo)}-${p(d)}`,ok=new Date(yr,mo-1,d).getMonth()==mo-1;h+=m[k]!=null?`<div title="${k} : ${L[m[k]]}" onclick="clearDay('${t}','${k}')" style="background:${P[m[k]]};cursor:pointer"></div>`:`<div title="${k}" style="${ok?'':'opacity:.15'}"></div>`}}
+ for(let d=1;d<=31;d++){h+=`<i>${d}</i>`;for(let mo=1;mo<=12;mo++){const k=`${yr}-${p(mo)}-${p(d)}`,ok=new Date(yr,mo-1,d).getMonth()==mo-1;h+=m[k]!=null?`<div title="${k} : ${L[m[k]]}" onclick="clearDay('${t}','${k}')" style="background:${P[m[k]]};cursor:pointer"></div>`:`<div title="${k}" style="${ok?'':'visibility:hidden'}"></div>`}}
  return `<div class="card"><h2>${GT[t]} ${yr}</h2>
  <div class="row"><button class="btn" onclick="yr--;render()">◀</button><b>${yr}</b><button class="btn" onclick="yr++;render()">▶</button></div>
  <div class="leg">${L.map((l,i)=>`<span style="--k:${P[i]}">${l}</span>`).join('')}</div>
