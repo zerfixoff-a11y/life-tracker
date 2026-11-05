@@ -40,14 +40,29 @@ table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:6px;bor
 .scroll{overflow-x:auto}
 </style></head><body><main>
 <h1>Mon Life Tracker</h1>
+<div id="who" class="row" style="margin-bottom:6px"></div>
 <nav id="nav"></nav>
 <div id="view"></div>
 </main>
 <script>
 const $=s=>document.querySelector(s),p=n=>String(n).padStart(2,'0');
 const today=()=>{const d=new Date();return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())};
-let D;try{D=JSON.parse(localStorage.getItem('lifetracker'))||{}}catch(e){D={}}
-const save=()=>{try{localStorage.setItem('lifetracker',JSON.stringify(D))}catch(e){}};
+let P=null,D={};
+try{P=JSON.parse(localStorage.getItem('lt_profile'))}catch(e){}
+const dk=()=>'lifetracker:'+P.email;
+const save=()=>{try{if(P)localStorage.setItem(dk(),JSON.stringify(D))}catch(e){}};
+function loadD(){
+ D=null;try{D=JSON.parse(localStorage.getItem(dk()))}catch(e){}
+ if(!D){let old=null;try{old=JSON.parse(localStorage.getItem('lifetracker'))}catch(e){}
+  D=old||{};if(old){save();try{localStorage.removeItem('lifetracker')}catch(e){}}}
+}
+if(P&&P.email)loadD();else P=null;
+function login(){
+ P={first:$('#l_first').value.trim(),last:$('#l_last').value.trim(),email:$('#l_mail').value.trim().toLowerCase()};
+ try{localStorage.setItem('lt_profile',JSON.stringify(P))}catch(e){}
+ loadD();render();
+}
+function logout(){if(confirm('Changer de compte ? Tes données restent enregistrées : retape le même e-mail pour les retrouver.')){P=null;D={};try{localStorage.removeItem('lt_profile')}catch(e){}render()}}
 const T={
  sleep:{n:'🌙 Sommeil',f:[['bed','Coucher','time'],['wake','Réveil','time']]},
  food:{n:'🍔 Fast-food',f:[['yes','Fast-food aujourd’hui ?','yn']]},
@@ -168,6 +183,13 @@ function imp(i){const r=new FileReader();r.onload=()=>{try{D=JSON.parse(r.result
 
 function render(keep){
  try{localStorage.setItem('lt_tab',tab)}catch(e){}
+ if(!P){
+  $('#who').innerHTML='';$('#nav').innerHTML='';
+  $('#view').innerHTML=`<div class="card"><h2>Bienvenue 👋</h2><p>Dis-moi qui tu es pour commencer. Tes données seront liées à ton adresse e-mail.</p>
+  <form onsubmit="login();return false"><label>Prénom<input id="l_first" required autocomplete="given-name"></label><label>Nom<input id="l_last" required autocomplete="family-name"></label><label>Adresse e-mail<input id="l_mail" type="email" required autocomplete="email"></label><button class="btn go">Commencer</button></form></div>`;
+  return;
+ }
+ $('#who').innerHTML=`<span>Salut <b>${esc(P.first)}</b> 👋</span><button class="btn" style="padding:3px 8px;font-size:.8rem" onclick="logout()">Changer de compte</button>`;
  $('#nav').innerHTML=TABS.map(t=>`<button class="${t==tab?'on':''}" onclick="tab='${t}';star=0;render()">${(T[t]||{n:NAMES[t]}).n}</button>`).join('');
  let h;
  if(tab=='month'){
