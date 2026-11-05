@@ -22,8 +22,9 @@ nav button.on{background:var(--c3);color:#1b1b1f;box-shadow:3px 3px 0 var(--bd)}
 form,.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
 label{display:flex;flex-direction:column;font-size:.8rem;font-weight:700;color:var(--mu);gap:3px}
 input,select{font:inherit;padding:8px;border:2px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);min-width:0}
-.stars button{font-size:1.6rem;background:none;border:0;cursor:pointer;padding:0 2px;color:var(--mu)}
+.stars button{font-size:1.9rem;background:none;border:0;cursor:pointer;padding:0 2px;color:var(--mu)}
 .stars button.on{color:#f5b800}
+.item .stars button{font-size:1.2rem}
 .list{max-height:340px;overflow:auto;margin-top:10px}
 .item{display:flex;justify-content:space-between;gap:8px;align-items:center;border-bottom:1px dashed var(--mu);padding:7px 0}
 .item small{color:var(--mu)}
@@ -49,13 +50,13 @@ let D;try{D=JSON.parse(localStorage.getItem('lifetracker'))||{}}catch(e){D={}}
 const save=()=>{try{localStorage.setItem('lifetracker',JSON.stringify(D))}catch(e){}};
 const T={
  sleep:{n:'🌙 Sommeil',f:[['bed','Coucher','time'],['wake','Réveil','time']]},
- food:{n:'🍔 Fast-food',f:[['what','Resto / plat','text'],['amt','Prix (€)','number']]},
- screen:{n:'📱 Écran',f:[['what','Appareil / activité','text'],['min','Durée (minutes)','number']]},
- series:{n:'🎬 Séries',f:[['what','Nom de la série','text'],['stars','Note','stars']]},
- shop:{n:'🛍️ Shopping',f:[['what','Achat','text'],['amt','Montant (€)','number']]}
+ food:{n:'🍔 Fast-food',f:[['yes','Fast-food aujourd’hui ?','yn']]},
+ screen:{n:'📱 Écran',f:[['min','Temps d’écran (heures, 0 = aucun)','hours']]},
+ series:{n:'📺 Séries',f:[['what','Nom de la série','text'],['stars','Note','stars']]},
+ shop:{n:'🛍️ Shopping',f:[['amt','Dépensé aujourd’hui (€, 0 = rien)','number']]}
 };
 const TABS=[...Object.keys(T),'month','global'],NAMES={month:'📅 Résumé du mois',global:'🌍 Résumé global'};
-let tab='sleep',monSel=null,yr=new Date().getFullYear(),star=0;
+let tab=(()=>{try{const x=localStorage.getItem('lt_tab');return TABS.includes(x)?x:'sleep'}catch(e){return'sleep'}})(),monSel=null,yr=new Date().getFullYear(),star=0;
 const curMonth=()=>today().slice(0,7);
 const eur=n=>(Math.round(n*100)/100).toFixed(2).replace('.',',')+' €';
 const hm=m=>{m=Math.round(m);return Math.floor(m/60)+'h'+p(m%60)};
@@ -67,49 +68,74 @@ const mlabel=m=>{const[y,mo]=m.split('-');return new Date(y,mo-1,1).toLocaleDate
 const COL=h=>h<6?1:h<7?2:h<8?3:h<9?4:h<10?5:6;
 const LEG=['Avant 6h','6h – 7h','7h – 8h','8h – 9h','9h – 10h','Après 10h'];
 
+const starBtns=(n,cb)=>[1,2,3,4,5].map(i=>`<button type="button" class="${i<=n?'on':''}" onclick="${cb(i)}" aria-label="${i} étoiles">★</button>`).join('');
 function line(t,e){
  if(t=='sleep')return `Couché ${e.bed} → réveil ${e.wake} <small>(${hm(dur(e))} de sommeil)</small>`;
- if(t=='food')return `${esc(e.what)} <small>${eur(e.amt)}</small>`;
- if(t=='screen')return `${esc(e.what)} <small>${hm(e.min)}</small>`;
- if(t=='series')return `${esc(e.what)} <small>${'★'.repeat(e.stars)+'☆'.repeat(5-e.stars)}</small>`;
- return `${esc(e.what)} <small>${eur(e.amt)}</small>`;
+ if(t=='food')return e.yes===false?'🟢 Pas de fast-food':'🔴 Fast-food';
+ if(t=='screen')return (+e.min?hm(e.min):'🟢 Aucun écran');
+ if(t=='series')return `📺 ${esc(e.what)} <span class="stars">${starBtns(e.stars,i=>`rate(${e.id},${i})`)}</span>`;
+ return +e.amt?eur(e.amt):'🟢 Rien dépensé';
 }
 function stats(t,a){
  if(!a.length)return[];
  const sum=k=>a.reduce((s,e)=>s+(+e[k]||0),0);
  if(t=='sleep'){const d=a.map(dur),w=a.map(e=>tm(e.wake));return[['Nuits',a.length],['Sommeil moyen',hm(d.reduce((x,y)=>x+y)/a.length)],['Réveil moyen',hm(w.reduce((x,y)=>x+y)/a.length)],['Plus longue nuit',hm(Math.max(...d))],['Plus courte nuit',hm(Math.min(...d))]]}
- if(t=='food')return[['Sorties',a.length],['Dépensé',eur(sum('amt'))],['Panier moyen',eur(sum('amt')/a.length)]];
- if(t=='screen'){const days=new Set(a.map(e=>e.date)).size;return[['Total',hm(sum('min'))],['Moyenne / jour',hm(sum('min')/days)],['Jours suivis',days]]}
- if(t=='series'){const b=[...a].sort((x,y)=>y.stars-x.stars)[0];return[['Séries notées',a.length],['Note moyenne',(sum('stars')/a.length).toFixed(1)+' ★'],['Meilleure',esc(b.what)]]}
- const b=[...a].sort((x,y)=>y.amt-x.amt)[0];return[['Dépensé',eur(sum('amt'))],['Achats',a.length],['Plus gros achat',esc(b.what)+' ('+eur(b.amt)+')']];
+ if(t=='food'){const y=new Set(a.filter(e=>e.yes!==false).map(e=>e.date)),n=new Set(a.filter(e=>e.yes===false&&!y.has(e.date)).map(e=>e.date));return[['Jours avec fast-food',y.size],['Jours sans',n.size]]}
+ if(t=='screen'){const days=new Set(a.map(e=>e.date)).size,tot=sum('min');return[['Total',hm(tot)],['Moyenne / jour',hm(tot/days)],['Jours suivis',days]]}
+ if(t=='series'){const r=a.filter(e=>e.stars>0),b=[...a].sort((x,y)=>y.stars-x.stars)[0];return[['Séries suivies',a.length],['Note moyenne',r.length?(r.reduce((s,e)=>s+e.stars,0)/r.length).toFixed(1)+' ★':'–'],['Mieux notée',esc(b.what)]]}
+ const b=[...a].sort((x,y)=>(+y.amt||0)-(+x.amt||0))[0],nd=new Set(a.filter(e=>+e.amt>0).map(e=>e.date)).size;
+ return[['Dépensé',eur(sum('amt'))],['Jours avec dépense',nd],['Plus grosse dépense',+b.amt?eur(b.amt):'–']];
 }
 const statsHTML=(t,a)=>{const s=stats(t,a);return s.length?`<div class="stats">${s.map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('')}</div>`:'<small>Aucune donnée.</small>'};
 const arr=(t,f=()=>true)=>(D[t]||[]).filter(f);
 
 function summary(f,title){
- const money=arr('food',f).reduce((s,e)=>s+ +e.amt,0)+arr('shop',f).reduce((s,e)=>s+ +e.amt,0);
- return `<div class="card"><h2>${title}</h2><div class="stats"><div class="stat"><b>${eur(money)}</b><span>Total dépensé (fast-food + shopping)</span></div></div></div>`+
+ const money=arr('shop',f).reduce((s,e)=>s+(+e.amt||0),0);
+ return `<div class="card"><h2>${title}</h2><div class="stats"><div class="stat"><b>${eur(money)}</b><span>Total dépensé en shopping</span></div></div></div>`+
  Object.keys(T).map(t=>`<div class="card"><h2>${T[t].n}</h2>${statsHTML(t,arr(t,f))}</div>`).join('');
 }
 function months(){const s=new Set([curMonth()]);Object.keys(T).forEach(t=>arr(t).forEach(e=>s.add(e.date.slice(0,7))));return[...s].sort().reverse()}
 
-function wakeGrid(){
- const m={};arr('sleep').forEach(e=>{if(e.date.startsWith(yr))m[e.date]=COL(tm(e.wake)/60)});
+const PAL={sleep:[1,2,3,4,5,6].map(i=>`var(--c${i})`),food:['#1fb15a','#ff3b3b'],
+ screen:['#1fb15a','#c4f56a','#ffe14d','#ffc23d','#ffa03d','#ff7f3d','#ff5a3d','#f03030','#c40f0f'],
+ shop:['#1fb15a','#c4f56a','#ffe14d','#ffc23d','#ff8a3d','#ff5a3d','#e01f1f']};
+const GL={sleep:LEG,food:['Pas de fast-food','Fast-food'],screen:['Aucun écran','Moins de 1h','1h – 2h','2h – 3h','3h – 4h','4h – 5h','5h – 6h','6h – 7h','Plus de 7h'],
+ shop:['0 €','1 – 20 €','20 – 40 €','40 – 50 €','50 – 100 €','100 – 150 €','150 € et +']};
+const GT={sleep:'Wake Up Tracker',food:'Fast-food',screen:'Temps d’écran',shop:'Shopping'};
+const bScreen=m=>m<=0?0:m<60?1:m<120?2:m<180?3:m<240?4:m<300?5:m<360?6:m<420?7:8;
+const bShop=a=>a<=0?0:a<=20?1:a<=40?2:a<=50?3:a<=100?4:a<150?5:6;
+function dayMap(t){
+ const m={};
+ arr(t,e=>e.date.startsWith(yr)).forEach(e=>{
+  if(t=='sleep')m[e.date]=COL(tm(e.wake)/60)-1;
+  else if(t=='food')m[e.date]=Math.max(m[e.date]||0,e.yes!==false?1:0);
+  else m[e.date]=(m[e.date]||0)+(t=='screen'?+e.min||0:+e.amt||0);
+ });
+ if(t=='screen'||t=='shop')for(const k in m)m[k]=(t=='screen'?bScreen:bShop)(m[k]);
+ return m;
+}
+function dayGrid(t){
+ const m=dayMap(t),P=PAL[t],L=GL[t];
  let h='<i></i>'+'JFMAMJJASOND'.split('').map(c=>`<i>${c}</i>`).join('');
- for(let d=1;d<=31;d++){h+=`<i>${d}</i>`;for(let mo=1;mo<=12;mo++){const k=`${yr}-${p(mo)}-${p(d)}`,ok=new Date(yr,mo-1,d).getMonth()==mo-1;h+=`<div title="${k}" style="${m[k]?'background:var(--c'+m[k]+')':ok?'':'opacity:.15'}"></div>`}}
- return `<div class="card"><h2>Wake Up Tracker ${yr}</h2>
+ for(let d=1;d<=31;d++){h+=`<i>${d}</i>`;for(let mo=1;mo<=12;mo++){const k=`${yr}-${p(mo)}-${p(d)}`,ok=new Date(yr,mo-1,d).getMonth()==mo-1;h+=m[k]!=null?`<div title="${k} : ${L[m[k]]}" onclick="clearDay('${t}','${k}')" style="background:${P[m[k]]};cursor:pointer"></div>`:`<div title="${k}" style="${ok?'':'opacity:.15'}"></div>`}}
+ return `<div class="card"><h2>${GT[t]} ${yr}</h2>
  <div class="row"><button class="btn" onclick="yr--;render()">◀</button><b>${yr}</b><button class="btn" onclick="yr++;render()">▶</button></div>
- <div class="leg">${LEG.map((l,i)=>`<span style="--k:var(--c${i+1})">${l}</span>`).join('')}</div>
+ <div class="leg">${L.map((l,i)=>`<span style="--k:${P[i]}">${l}</span>`).join('')}</div>
+ <p><small>Tu t’es trompé ? Touche une case colorée pour effacer ce jour, puis ressaisis-le.</small></p>
  <div class="grid">${h}</div></div>`;
 }
 
 function trackerView(t){
  const c=T[t],list=arr(t).sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id);
- const inputs=c.f.map(([k,l,ty])=>ty=='stars'?`<label>${l}<span class="stars" id="stars">${[1,2,3,4,5].map(i=>`<button type="button" class="${i<=star?'on':''}" onclick="star=${i};render(true)" aria-label="${i} étoiles">★</button>`).join('')}</span></label>`
-  :`<label>${l}<input id="f_${k}" type="${ty}" ${ty=='number'?'min="0" step="0.01"':''} required></label>`).join('');
+ const inputs=c.f.map(([k,l,ty])=>{
+  if(ty=='stars')return `<label>📺 ${l} (facultatif)<span class="stars">${starBtns(star,i=>`star=${i==star?0:i};render(true)`)}</span></label>`;
+  if(ty=='yn')return `<label>${l}<select id="f_${k}"><option value="0">Non 🟢</option><option value="1">Oui 🔴</option></select></label>`;
+  const num=ty=='number'||ty=='optnum'||ty=='hours',req=ty.startsWith('opt')?'':'required';
+  return `<label>${l}<input id="f_${k}" type="${num?'number':ty=='opt'?'text':ty}" ${num?'min="0" step="'+(ty=='hours'?'0.25':'0.01')+'"':''} ${req}></label>`;
+ }).join('');
  return `<div class="card"><h2>${c.n}</h2>
  <form onsubmit="add('${t}');return false"><label>Date${t=='sleep'?' du réveil':''}<input id="f_date" type="date" value="${today()}" required></label>${inputs}<button class="btn go">Ajouter</button></form></div>
- ${t=='sleep'?wakeGrid():''}
+ ${PAL[t]?dayGrid(t):''}
  <div class="card"><h2>Ce mois-ci</h2>${statsHTML(t,arr(t,e=>e.date.startsWith(curMonth())))}</div>
  <div class="card"><h2>Historique</h2><div class="list">${list.length?list.map(e=>`<div class="item"><div><b>${fdate(e.date)}</b> — ${line(t,e)}</div><button class="btn del" onclick="del('${t}',${e.id})" aria-label="Supprimer">✕</button></div>`).join(''):'<small>Rien pour l’instant. Ajoute ta première entrée ci-dessus.</small>'}</div></div>`;
 }
@@ -117,18 +143,22 @@ function trackerView(t){
 function add(t){
  const e={id:Date.now(),date:$('#f_date').value};
  for(const[k,,ty]of T[t].f){
-  if(ty=='stars'){if(!star){alert('Choisis une note de 1 à 5 étoiles.');return}e[k]=star}
-  else e[k]=ty=='number'?+$('#f_'+k).value:$('#f_'+k).value.trim();
+  if(ty=='stars'){e[k]=star;continue}
+  const v=$('#f_'+k).value;
+  e[k]=ty=='yn'?v=='1':ty=='hours'?Math.round((+v)*60):ty=='number'?+v:ty=='optnum'?(+v||0):v.trim();
  }
+ if(t=='sleep'||t=='food')D[t]=(D[t]||[]).filter(x=>x.date!=e.date);
  (D[t]=D[t]||[]).push(e);star=0;save();render();
 }
+function clearDay(t,d){if(confirm('Effacer l’entrée du '+fdate(d)+' ? Tu pourras la ressaisir ensuite.')){D[t]=D[t].filter(e=>e.date!=d);save();render()}}
+function rate(id,n){const e=D.series.find(x=>x.id==id);e.stars=e.stars==n?0:n;save();render()}
 function del(t,id){if(confirm('Supprimer cette entrée ?')){D[t]=D[t].filter(e=>e.id!=id);save();render()}}
 
 function globalView(){
  const ms=months();
  const rows=ms.map(m=>{const f=e=>e.date.startsWith(m),sl=arr('sleep',f),fo=arr('food',f),sc=arr('screen',f),se=arr('series',f),sh=arr('shop',f);
-  const s=(a,k)=>a.reduce((x,e)=>x+ +e[k],0);
-  return `<tr><td>${mlabel(m)}</td><td>${sl.length?hm(sl.reduce((x,e)=>x+dur(e),0)/sl.length):'–'}</td><td>${fo.length} / ${eur(s(fo,'amt'))}</td><td>${hm(s(sc,'min'))}</td><td>${se.length}</td><td>${eur(s(sh,'amt'))}</td></tr>`}).join('');
+  const s=(a,k)=>a.reduce((x,e)=>x+(+e[k]||0),0);
+  return `<tr><td>${mlabel(m)}</td><td>${sl.length?hm(sl.reduce((x,e)=>x+dur(e),0)/sl.length):'–'}</td><td>${fo.filter(e=>e.yes!==false).length} fois</td><td>${hm(s(sc,'min'))}</td><td>${se.length}</td><td>${eur(s(sh,'amt'))}</td></tr>`}).join('');
  return summary(()=>true,'Tout ce que j’ai fait depuis le début')+`<div class="card"><h2>Mois par mois</h2><div class="scroll"><table><tr><th>Mois</th><th>Sommeil moy.</th><th>Fast-food</th><th>Écran</th><th>Séries</th><th>Shopping</th></tr>${rows}</table></div></div>
  <div class="card"><h2>Sauvegarde</h2><p>Tes données sont enregistrées dans ce navigateur. Exporte-les pour les garder ou les transférer sur un autre appareil.</p>
  <div class="row"><button class="btn" onclick="exp()">Exporter (.json)</button><label class="btn">Importer<input type="file" accept=".json" hidden onchange="imp(this)"></label></div></div>`;
@@ -137,6 +167,7 @@ function exp(){const a=document.createElement('a');a.href=URL.createObjectURL(ne
 function imp(i){const r=new FileReader();r.onload=()=>{try{D=JSON.parse(r.result);save();render()}catch(e){alert('Fichier invalide.')}};if(i.files[0])r.readAsText(i.files[0])}
 
 function render(keep){
+ try{localStorage.setItem('lt_tab',tab)}catch(e){}
  $('#nav').innerHTML=TABS.map(t=>`<button class="${t==tab?'on':''}" onclick="tab='${t}';star=0;render()">${(T[t]||{n:NAMES[t]}).n}</button>`).join('');
  let h;
  if(tab=='month'){
@@ -147,5 +178,6 @@ function render(keep){
  $('#view').innerHTML=h;
  if(sv)['f_date',...T[tab].f.map(f=>'f_'+f[0])].forEach((i,n)=>{if($('#'+i)&&sv[n]!=null)$('#'+i).value=sv[n]});
 }
+try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
 render();
 </script></body></html>
