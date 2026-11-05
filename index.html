@@ -21,7 +21,7 @@ nav button.on{background:var(--c3);color:#1b1b1f;box-shadow:3px 3px 0 var(--bd)}
 .card h2{font-family:'Permanent Marker',cursive;font-weight:400;margin:0 0 8px;font-size:1.3rem}
 form,.row{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
 label{display:flex;flex-direction:column;font-size:.8rem;font-weight:700;color:var(--mu);gap:3px}
-input,select{font:inherit;padding:8px;border:2px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);min-width:0}
+input,select,textarea{font:inherit;padding:8px;border:2px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--tx);min-width:0}
 .stars button{font-size:1.9rem;background:none;border:0;cursor:pointer;padding:0 2px;color:var(--mu)}
 .stars button.on{color:#f5b800}
 .item .stars button{font-size:1.2rem}
@@ -38,6 +38,9 @@ input,select{font:inherit;padding:8px;border:2px solid var(--bd);border-radius:8
 .leg span:before{content:"";display:inline-block;width:12px;height:12px;border:2px solid var(--bd);margin-right:5px;background:var(--k);vertical-align:-2px}
 table{width:100%;border-collapse:collapse;font-size:.85rem}td,th{padding:6px;border-bottom:1px solid var(--mu);text-align:left}
 .scroll{overflow-x:auto}
+.cvhead{display:flex;gap:14px;align-items:center;margin-bottom:8px}.cvhead img{width:96px;height:96px;object-fit:cover;border-radius:50%;border:2px solid var(--bd)}
+.cv h3{font-size:1rem;margin:12px 0 2px}.cv ul{margin:0;padding-left:20px}textarea{width:100%}
+@media print{h1,#who,nav,.noprint{display:none!important}body{background:#fff!important}.card{background:#fff!important;color:#000!important;border-color:#000!important}}
 </style></head><body><main>
 <h1>Mon Life Tracker</h1>
 <div id="who" class="row" style="margin-bottom:6px"></div>
@@ -70,7 +73,7 @@ const T={
  series:{n:'📺 Séries',f:[['what','Nom de la série','text'],['stars','Note','stars']]},
  shop:{n:'🛍️ Shopping',f:[['amt','Dépensé aujourd’hui (€, 0 = rien)','number']]}
 };
-const TABS=[...Object.keys(T),'month','global'],NAMES={month:'📅 Résumé du mois',global:'🌍 Résumé global'};
+const TABS=[...Object.keys(T),'month','global','me','cv'],NAMES={month:'📅 Résumé du mois',global:'🌍 Résumé global',me:'💬 IA — Moi',cv:'🪪 Mon résumé'};
 let tab=(()=>{try{const x=localStorage.getItem('lt_tab');return TABS.includes(x)?x:'sleep'}catch(e){return'sleep'}})(),monSel=null,yr=new Date().getFullYear(),star=0;
 const curMonth=()=>today().slice(0,7);
 const eur=n=>(Math.round(n*100)/100).toFixed(2).replace('.',',')+' €';
@@ -178,6 +181,66 @@ function globalView(){
  <div class="card"><h2>Sauvegarde</h2><p>Tes données sont enregistrées dans ce navigateur. Exporte-les pour les garder ou les transférer sur un autre appareil.</p>
  <div class="row"><button class="btn" onclick="exp()">Exporter (.json)</button><label class="btn">Importer<input type="file" accept=".json" hidden onchange="imp(this)"></label></div></div>`;
 }
+
+/* ---------- IA « Moi » ---------- */
+const MODEL='claude-sonnet-5-5';
+const SYS=`Tu aides une personne à construire un portrait d’elle-même à partir de ce qu’elle t’écrit au fil des jours. Tu reçois toutes ses notes datées, de la plus ancienne à la plus récente, et la date du jour. Relis tout et produis un portrait À JOUR :
+- Ne garde que ce qui est vrai aujourd’hui. Quand une note récente contredit ou dépasse une ancienne (ex. « je suis timide » puis « j’ai vaincu ma timidité »), retire l’ancienne information et ne la mentionne plus.
+- N’invente rien : tout doit venir des notes. Aucun diagnostic.
+- Écris à la première personne (« je »), en français naturel, ton simple et sympa, phrases courtes.
+- Réponds UNIQUEMENT par un objet JSON, sans texte autour, de la forme :
+{"resume":"2 à 3 phrases de présentation","traits":[],"aime":[],"naime_pas":[],"difficultes":[],"objectifs":[],"infos":[]}
+Chaque liste contient des éléments courts (quelques mots) ; une liste peut être vide.`;
+const CVS=[['traits','Ce que je suis'],['aime','J’aime'],['naime_pas','J’aime moins'],['difficultes','Ce sur quoi je travaille'],['objectifs','Mes objectifs'],['infos','En vrac']];
+let msg='',busy=false;
+const getKey=()=>{try{return localStorage.getItem('lt_key')}catch(e){return null}};
+function saveKey(){const v=$('#k_in').value.trim();if(v){try{localStorage.setItem('lt_key',v)}catch(e){}}msg='';render()}
+function removeKey(){if(confirm('Retirer la clé API de cet appareil ?')){try{localStorage.removeItem('lt_key')}catch(e){}render()}}
+async function refreshProfile(){
+ const key=getKey();if(!key)throw new Error('Ajoute d’abord ta clé API.');
+ const notes=(D.notes||[]).slice(-200);
+ if(!notes.length){D.profile=null;save();return}
+ const r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',
+  headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+  body:JSON.stringify({model:MODEL,max_tokens:1500,system:SYS,messages:[{role:'user',content:'Date du jour : '+today()+'\n\nNotes :\n'+notes.map(n=>'['+n.date+'] '+n.text).join('\n')}]})});
+ const j=await r.json();
+ if(!r.ok)throw new Error((j.error&&j.error.message)||('Erreur '+r.status));
+ const t=j.content.map(c=>c.text||'').join(''),a=t.indexOf('{'),b=t.lastIndexOf('}');
+ D.profile=JSON.parse(t.slice(a,b+1));D.profile.maj=today();save();
+}
+async function runRefresh(){
+ if(busy)return;busy=true;msg='⏳ Je relis tout…';render();
+ try{await refreshProfile();msg='✓ Résumé mis à jour.'}catch(e){msg='⚠️ '+e.message}
+ busy=false;render();
+}
+function sendNote(){
+ const v=$('#n_text').value.trim();if(!v||busy)return;
+ (D.notes=D.notes||[]).push({id:Date.now(),date:today(),text:v});save();
+ if(getKey())runRefresh();else{msg='Noté ✓ Ajoute ta clé API pour que l’IA mette ton résumé à jour.';render()}
+}
+function delNote(id){if(confirm('Supprimer cette note ? Clique ensuite sur « Relire tout » pour mettre le résumé à jour.')){D.notes=D.notes.filter(n=>n.id!=id);save();render()}}
+function meView(){
+ const ns=[...(D.notes||[])].reverse(),k=getKey();
+ return `<div class="card"><h2>💬 IA — Moi</h2><p>Écris ce que tu veux sur toi : ce que tu es, ce que tu aimes, tes complexes, ce qui change. L’IA relit tout et tient ton résumé à jour.</p>
+ <textarea id="n_text" rows="4" placeholder="Ex : je suis un peu timide, j’adore le basket…"></textarea>
+ <div class="row" style="margin-top:8px"><button class="btn go" onclick="sendNote()">Envoyer à l’IA</button><button class="btn" onclick="runRefresh()">Relire tout et mettre à jour</button></div>
+ <p>${esc(msg)}</p></div>
+ ${k?'':`<div class="card"><h2>🔑 Clé API</h2><p>Pour que l’IA fonctionne, colle ta clé API Anthropic (console.anthropic.com). Elle reste uniquement dans ce navigateur, jamais dans le site.</p><div class="row"><input id="k_in" type="password" placeholder="sk-ant-…" autocomplete="off"><button class="btn go" onclick="saveKey()">Enregistrer</button></div></div>`}
+ <div class="card"><h2>Ce que je t’ai dit</h2><div class="list">${ns.length?ns.map(n=>`<div class="item"><div><b>${fdate(n.date)}</b> — ${esc(n.text)}</div><button class="btn del" onclick="delNote(${n.id})" aria-label="Supprimer">✕</button></div>`).join(''):'<small>Rien pour l’instant.</small>'}</div>${k?'<p><button class="btn" onclick="removeKey()">Retirer ma clé API</button></p>':''}</div>`;
+}
+function cvText(){const pr=D.profile;if(!pr)return'';let t=P.first+' '+P.last+'\n\n'+(pr.resume||'')+'\n';for(const[k,l]of CVS){if(k=='difficultes'&&!D.showDiff)continue;if((pr[k]||[]).length)t+='\n'+l+' :\n'+pr[k].map(x=>'- '+x).join('\n')+'\n'}return t}
+function copyCV(){navigator.clipboard.writeText(cvText()).then(()=>alert('Copié ✓'),()=>alert('Copie impossible ici.'))}
+function setPhoto(i){const f=i.files[0];if(!f)return;const im=new Image(),u=URL.createObjectURL(f);
+ im.onload=()=>{const r=Math.min(1,360/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*r;c.height=im.height*r;c.getContext('2d').drawImage(im,0,0,c.width,c.height);D.photo=c.toDataURL('image/jpeg',.82);URL.revokeObjectURL(u);save();render()};im.src=u}
+function cvView(){
+ const pr=D.profile;
+ const body=pr?`<p>${esc(pr.resume||'')}</p>`+CVS.filter(([k])=>(k!='difficultes'||D.showDiff)&&(pr[k]||[]).length).map(([k,l])=>`<h3>${l}</h3><ul>${pr[k].map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`).join(''):'<p><small>Pas encore de résumé. Va dans « IA — Moi », écris quelques phrases sur toi, puis reviens ici.</small></p>';
+ return `<div class="card cv"><div class="cvhead">${D.photo?`<img src="${D.photo}" alt="Ma photo">`:''}<div><h2 style="font-size:1.8rem">${esc(P.first)} ${esc(P.last)}</h2>${pr?`<small>Mis à jour le ${fdate(pr.maj)}</small>`:''}</div></div>${body}</div>
+ <div class="card noprint"><div class="row"><label class="btn">📷 Ma photo<input type="file" accept="image/*" hidden onchange="setPhoto(this)"></label>
+ ${D.photo?'<button class="btn" onclick="D.photo=null;save();render()">Retirer la photo</button>':''}
+ <button class="btn" onclick="runRefresh()">Mettre à jour</button><button class="btn go" onclick="window.print()">Imprimer / PDF</button><button class="btn" onclick="copyCV()">Copier le texte</button></div>
+ <p>${esc(msg)}</p><p><label style="flex-direction:row;align-items:center;gap:6px"><input type="checkbox" ${D.showDiff?'checked':''} onchange="D.showDiff=this.checked;save();render()"> Afficher « ce sur quoi je travaille » dans le résumé partagé</label></p></div>`;
+}
 function exp(){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(D)],{type:'application/json'}));a.download='life-tracker-'+today()+'.json';a.click()}
 function imp(i){const r=new FileReader();r.onload=()=>{try{D=JSON.parse(r.result);save();render()}catch(e){alert('Fichier invalide.')}};if(i.files[0])r.readAsText(i.files[0])}
 
@@ -195,7 +258,7 @@ function render(keep){
  if(tab=='month'){
   const m=monSel||curMonth(),ms=months();
   h=`<div class="card"><label>Mois affiché<select onchange="monSel=this.value;render()">${ms.map(x=>`<option value="${x}" ${x==m?'selected':''}>${mlabel(x)}${x==curMonth()?' (en cours)':''}</option>`).join('')}</select></label></div>`+summary(e=>e.date.startsWith(m),'Résumé de '+mlabel(m));
- }else if(tab=='global')h=globalView();else h=trackerView(tab);
+ }else if(tab=='global')h=globalView();else if(tab=='me')h=meView();else if(tab=='cv')h=cvView();else h=trackerView(tab);
  let sv=keep?['f_date',...T[tab].f.map(f=>'f_'+f[0])].map(i=>$('#'+i)&&$('#'+i).value):null;
  $('#view').innerHTML=h;
  if(sv)['f_date',...T[tab].f.map(f=>'f_'+f[0])].forEach((i,n)=>{if($('#'+i)&&sv[n]!=null)$('#'+i).value=sv[n]});
